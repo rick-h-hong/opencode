@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# oc - run containerised opencode against your local ollama server
+#
+# Usage:
+#   oc [PATH] [OPENCODE ARGS...]
+#
+#   PATH            workspace to work in (default: current directory).
+#                   e.g.  oc ~/code/myproject                  # interactive TUI
+#                         oc ~/code/myproject run "fix the failing test"
+#                         oc run "hello"                        # current dir
+#   OPENCODE ARGS   everything after PATH is passed straight to opencode
+#                   (run, serve, models, -m, --agent, -c, -s, --fork, ...)
+#
+# Environment:
+#   OC_IMAGE        image name (default: oc-local)
+#   OC_OLLAMA_URL   ollama base url (default: http://host.docker.internal:11434)
+
+set -euo pipefail
+
+IMAGE="${OC_IMAGE:-oc-local}"
+OLLAMA_URL="${OC_OLLAMA_URL:-http://host.docker.internal:11434}"
+CONTAINER="oc-session"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+WORKDIR="$(pwd)"
+
+usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//'; }
+
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+  usage
+  exit 0
+fi
+
+# opencode subcommands: if the first arg looks like one (or a flag),
+# don't mistake it for a workspace path
+is_opencode_cmd() {
+  case "$1" in
+    -*) return 0 ;;
+  esac
+  case "$1" in
+    completion|acp|mcp|run|attach|debug|providers|auth|agent|upgrade|uninstall|serve|web|models|stats|export|import|github|pr|session|plugin|plug|db) return 0 ;;
+  esac
+  return 1
+}
+
+if [[ $# -gt 0 ]]; then
+  if is_opencode_cmd "$1"; then
+    # no explicit path: work in the current directory
+    :
+  elif [[ -e "$1" ]]; then
+    WORKDIR="$1"
+    shift
+  fi
+fi
+
+[[ -d "$WORKDIR" ]] || { echo "oc: workspace not found: $WORKDIR" >&2; exit 1; }
+WORKDIR="$(cd "$WORKDIR" && pwd)"
+
+# --- pre-checks --------------------------------------------------------------
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "oc: image '$IMAGE' not found. Build it first:" >&2
+  echo "  docker build -t oc-local $(cd "$(dirname "$0")" && pwd)" >&2
+  exit 1
+fi
+
+if ! docker run --rm --init \
+    --add-host host.docker.internal:host-gateway \
+    --entrypoint sh "$IMAGE" -c "wget -q -O /dev/null $OLLAMA_URL/api/tags" 2>/dev/null; then
+  echo "oc: cannot reach ollama at $OLLAMA_URL (is it running?)" >&2
+  exit 1
+fi
+
+# --- mount host opencode state so sessions/history survive across runs ------
+# NOTE: ~/.config/opencode is deliberately NOT mounted - its ollama baseURL
+# points at the host's localhost. The container uses the config baked into
+# the image (opencode.json), which targets host.docker.internal:11434.
+# Mount it explicitly if you want your host global config inside instead.
+# Set OC_NO_STATE=1 to skip state mounts entirely.
+MOUNTS=()
+CONTAINER_HOME="${OC_CONTAINER_HOME:-/home/duka}"
+if [[ -z "${OC_NO_STATE:-}" ]]; then
+  # .ssh lets git use your host key for clone/push to private repos
+  for dir in .local/share/opencode .local/state/opencode .cache/opencode .opencode .ssh; do
+    if [[ -d "$HOME/$dir" ]]; then
+      MOUNTS+=(-v "$HOME/$dir:$CONTAINER_HOME/$dir")
+    fi
+  done
+fi
+
+# --- run ---------------------------------------------------------------------
+docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+# only attach a TTY when we actually have one (run "msg" piped works too)
+TTY_FLAG=""
+if [[ -t 0 && -t 1 ]]; then
+  TTY_FLAG="-t"
+fi
+
+docker run -i $TTY_FLAG --rm --init \
+  --name "$CONTAINER" \
+  --add-host host.docker.internal:host-gateway \
+  --user "${HOST_UID}:${HOST_GID}" \
+  -w /workspace \
+  -v "$WORKDIR:/workspace" \
+  ${MOUNTS[@]+"${MOUNTS[@]}"} \
+  -e OLLAMA_URL="$OLLAMA_URL" \
+  -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+  "$IMAGE" \
+  "$@"
