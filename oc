@@ -15,6 +15,8 @@
 #   OC_IMAGE        image name (default: oc-local)
 #   OC_OLLAMA_URL   ollama base url (default: http://host.docker.internal:11434)
 #   OC_CONTAINER_HOME  home dir inside the container (default: /home/user)
+#   OC_GIT_NAME        git author/committer name   (default: host git config user.name)
+#   OC_GIT_EMAIL       git author/committer email  (default: host git config user.email)
 
 set -euo pipefail
 
@@ -24,6 +26,10 @@ CONTAINER="oc-session"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 WORKDIR="$(pwd)"
+# host git identity, passed into the container as GIT_* env vars so commits
+# work even when the repo has no identity of its own
+GIT_NAME="${OC_GIT_NAME:-$(git config user.name 2>/dev/null || true)}"
+GIT_EMAIL="${OC_GIT_EMAIL:-$(git config user.email 2>/dev/null || true)}"
 
 usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -107,6 +113,8 @@ docker run -i $TTY_FLAG --rm --init \
   --mount type=bind,src=/etc/passwd,dst=/etc/passwd,ro \
   -e HOME="$CONTAINER_HOME" \
   -e OLLAMA_URL="$OLLAMA_URL" \
+  ${GIT_NAME:+-e GIT_AUTHOR_NAME="$GIT_NAME" -e GIT_COMMITTER_NAME="$GIT_NAME"} \
+  ${GIT_EMAIL:+-e GIT_AUTHOR_EMAIL="$GIT_EMAIL" -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"} \
   -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
   "$IMAGE" \
   "$@"
