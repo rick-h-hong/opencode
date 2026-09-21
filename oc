@@ -12,11 +12,13 @@
 #                   (run, serve, models, -m, --agent, -c, -s, --fork, ...)
 #
 # Environment:
-#   OC_IMAGE        image name (default: oc-local)
-#   OC_OLLAMA_URL   ollama base url (default: http://host.docker.internal:11434)
+#   OC_IMAGE           image name (default: oc-local)
+#   OC_OLLAMA_URL      ollama base url (default: http://host.docker.internal:11434)
 #   OC_CONTAINER_HOME  home dir inside the container (default: /home/user)
 #   OC_GIT_NAME        git author/committer name   (default: host git config user.name)
 #   OC_GIT_EMAIL       git author/committer email  (default: host git config user.email)
+#   OC_SSH_COMMAND     full ssh command for git        (default: built from your host's ~/.ssh keys)
+#   OC_NO_STATE        set to 1 to skip state/.ssh mounts (also disables the auto ssh command)
 
 set -euo pipefail
 
@@ -65,8 +67,8 @@ WORKDIR="$(cd "$WORKDIR" && pwd)"
 
 # --- pre-checks --------------------------------------------------------------
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-  echo "oc: image '$IMAGE' not found. Build it first:" >&2
-  echo "  docker build -t oc-local $(cd "$(dirname "$0")" && pwd)" >&2
+  echo "oc: image '$IMAGE' not found. Build it first (as the user that runs it):" >&2
+  echo "  docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t oc-local $(cd "$(dirname "$0")" && pwd)" >&2
   exit 1
 fi
 
@@ -85,13 +87,33 @@ fi
 # Set OC_NO_STATE=1 to skip state mounts entirely.
 MOUNTS=()
 CONTAINER_HOME="${OC_CONTAINER_HOME:-/home/user}"
+SSH_KEY_MOUNTED=""
 if [[ -z "${OC_NO_STATE:-}" ]]; then
   # .ssh lets git use your host key for clone/push to private repos
   for dir in .local/share/opencode .local/state/opencode .cache/opencode .opencode .ssh; do
     if [[ -d "$HOME/$dir" ]]; then
       MOUNTS+=(-v "$HOME/$dir:$CONTAINER_HOME/$dir")
+      [[ "$dir" == .ssh ]] && SSH_KEY_MOUNTED=1
     fi
   done
+fi
+
+# git over SSH: pass explicit key/known_hosts paths. ssh resolves its default
+# IdentityFile/known_hosts from the /etc/passwd entry, whose home is the HOST
+# home (e.g. /home/duka) - not the container $HOME, so the defaults miss the
+# mounted keys. OC_SSH_COMMAND overrides the whole thing.
+GIT_SSH_CMD=()
+if [[ -n "${OC_SSH_COMMAND:-}" ]]; then
+  GIT_SSH_CMD=(-e GIT_SSH_COMMAND="$OC_SSH_COMMAND")
+elif [[ -n "$SSH_KEY_MOUNTED" ]]; then
+  cdir="${CONTAINER_HOME}/.ssh"
+  cmd="ssh -o UserKnownHostsFile=${cdir}/known_hosts -o StrictHostKeyChecking=accept-new"
+  for key in "$HOME"/.ssh/id_*; do
+    [[ -f "$key" ]] || continue
+    case "$key" in *.pub) continue ;; esac
+    cmd+=" -o IdentityFile=${cdir}/$(basename "$key")"
+  done
+  GIT_SSH_CMD=(-e GIT_SSH_COMMAND="$cmd")
 fi
 
 # --- run ---------------------------------------------------------------------
@@ -115,6 +137,6 @@ docker run -i $TTY_FLAG --rm --init \
   -e OLLAMA_URL="$OLLAMA_URL" \
   ${GIT_NAME:+-e GIT_AUTHOR_NAME="$GIT_NAME" -e GIT_COMMITTER_NAME="$GIT_NAME"} \
   ${GIT_EMAIL:+-e GIT_AUTHOR_EMAIL="$GIT_EMAIL" -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"} \
-  -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+  ${GIT_SSH_CMD[@]+"${GIT_SSH_CMD[@]}"} \
   "$IMAGE" \
   "$@"

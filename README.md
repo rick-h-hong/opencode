@@ -12,13 +12,19 @@ Includes the [`@cortexkit/magic-context`](https://www.npmjs.com/package/@cortexk
 ## Build
 
 ```sh
-docker build -t oc-local .
+# build as the user that will run the container (owner of /workspace + /home/user)
+docker build \
+  --build-arg USER_ID=$(id -u) \
+  --build-arg GROUP_ID=$(id -g) \
+  -t oc-local .
 ```
+
+Rebuild when switching the user that runs the image (or after `Dockerfile`/`opencode.json` changes).
 
 The image is based on `ghcr.io/anomalyco/opencode:1.18.31` and adds:
 
 - `git`, `nodejs`, `npm`, `go`, `bash`, `openssh-client`
-- Generic home dir `/home/user` (world-writable — the container runs as your host user)
+- Home dir `/home/user` (owned by the build user's uid/gid — the container runs as your host user)
 - Global install of `@cortexkit/magic-context`
 - `opencode.json` baked in at `/home/user/.config/opencode/opencode.json`, pointing at `http://host.docker.internal:11434/v1`
 
@@ -41,14 +47,17 @@ Examples:
 
 Environment overrides:
 
-| Variable            | Default                                    | Purpose                        |
-| ------------------- | ------------------------------------------ | ------------------------------ |
-| `OC_IMAGE`          | `oc-local`                                 | image to use                   |
-| `OC_OLLAMA_URL`     | `http://host.docker.internal:11434`        | Ollama base URL                |
-| `OC_CONTAINER_HOME` | `/home/user`                               | home dir for state mounts      |
-| `OC_NO_STATE`       | _(unset)_                                  | set to `1` to skip state mounts |
+| Variable            | Default                                        | Purpose                         |
+| ------------------- | ---------------------------------------------- | ------------------------------- |
+| `OC_IMAGE`          | `oc-local`                                     | image to use                    |
+| `OC_OLLAMA_URL`     | `http://host.docker.internal:11434`            | Ollama base URL                 |
+| `OC_CONTAINER_HOME` | `/home/user`                                   | home dir for state mounts       |
+| `OC_GIT_NAME`       | host `git config user.name`                    | git commit name in the container |
+| `OC_GIT_EMAIL`      | host `git config user.email`                   | git commit email in the container |
+| `OC_SSH_COMMAND`    | built from your host's `~/.ssh` keys           | full `ssh` command for git      |
+| `OC_NO_STATE`       | _(unset)_                                      | set to `1` to skip state mounts |
 
-The script pre-checks that Ollama is reachable before starting, and mounts your host opencode state (`~/.local/share/opencode`, etc.) plus `~/.ssh` and `~/.gitconfig` so sessions, private git repos, and git identity (committing) keep working — the container runs as your host uid with no passwd entry and a generic `HOME`, so the git identity must come from the mounted config file. The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
+The script pre-checks that the image exists and Ollama is reachable before starting, and mounts your host opencode state (`~/.local/share/opencode`, etc.) plus `~/.ssh` and `/etc/passwd` so sessions and private git repos keep working. Git identity (committing) comes from the host's `git config user.name`/`user.email`, passed in as `GIT_*` env vars. For git over SSH, the script assembles a `GIT_SSH_COMMAND` that points at the mounted keys with explicit `IdentityFile`/`UserKnownHostsFile` paths (ssh would otherwise look under the host home from `/etc/passwd`, which is not mounted). The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
 
 ## Configuration
 
