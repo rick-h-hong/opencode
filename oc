@@ -14,6 +14,7 @@
 # Environment:
 #   OC_IMAGE        image name (default: oc-local)
 #   OC_OLLAMA_URL   ollama base url (default: http://host.docker.internal:11434)
+#   OC_CONTAINER_HOME  home dir inside the container (default: /home/user)
 
 set -euo pipefail
 
@@ -77,7 +78,7 @@ fi
 # Mount it explicitly if you want your host global config inside instead.
 # Set OC_NO_STATE=1 to skip state mounts entirely.
 MOUNTS=()
-CONTAINER_HOME="${OC_CONTAINER_HOME:-/home/duka}"
+CONTAINER_HOME="${OC_CONTAINER_HOME:-/home/user}"
 if [[ -z "${OC_NO_STATE:-}" ]]; then
   # .ssh lets git use your host key for clone/push to private repos
   for dir in .local/share/opencode .local/state/opencode .cache/opencode .opencode .ssh; do
@@ -85,6 +86,12 @@ if [[ -z "${OC_NO_STATE:-}" ]]; then
       MOUNTS+=(-v "$HOME/$dir:$CONTAINER_HOME/$dir")
     fi
   done
+  # host git identity - container has no passwd entry for your uid and a
+  # plain HOME mount is out, so without this git commit fails with
+  # "Committer identity unknown"
+  if [[ -f "$HOME/.gitconfig" ]]; then
+    MOUNTS+=(-v "$HOME/.gitconfig:$CONTAINER_HOME/.gitconfig")
+  fi
 fi
 
 # --- run ---------------------------------------------------------------------
@@ -103,6 +110,7 @@ docker run -i $TTY_FLAG --rm --init \
   -w /workspace \
   -v "$WORKDIR:/workspace" \
   ${MOUNTS[@]+"${MOUNTS[@]}"} \
+  -e HOME="$CONTAINER_HOME" \
   -e OLLAMA_URL="$OLLAMA_URL" \
   -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
   "$IMAGE" \

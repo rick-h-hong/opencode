@@ -46,7 +46,6 @@
     }
   },
   //"model": "ollama/qwen3.8-64k",
-  "model": "ollama/qwen3.8-42k",
-  //"model": "ollama/qwen3.8-32k",
-  }
+  "model": "ollama/qwen3.8-48k",
+  //"model": "ollama/qwen3.8-32k"
 }

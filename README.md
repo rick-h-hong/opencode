@@ -18,9 +18,9 @@ docker build -t oc-local .
 The image is based on `ghcr.io/anomalyco/opencode:1.18.31` and adds:
 
 - `git`, `nodejs`, `npm`, `go`, `bash`, `openssh-client`
-- A non-root `duka` user (UID/GID 1000)
+- Generic home dir `/home/user` (world-writable — the container runs as your host user)
 - Global install of `@cortexkit/magic-context`
-- `opencode.json` baked in at `/home/duka/.config/opencode/opencode.json`, pointing at `http://host.docker.internal:11434/v1`
+- `opencode.json` baked in at `/home/user/.config/opencode/opencode.json`, pointing at `http://host.docker.internal:11434/v1`
 
 ## Usage
 
@@ -45,10 +45,10 @@ Environment overrides:
 | ------------------- | ------------------------------------------ | ------------------------------ |
 | `OC_IMAGE`          | `oc-local`                                 | image to use                   |
 | `OC_OLLAMA_URL`     | `http://host.docker.internal:11434`        | Ollama base URL                |
-| `OC_CONTAINER_HOME` | `/home/duka`                               | home dir for state mounts      |
+| `OC_CONTAINER_HOME` | `/home/user`                               | home dir for state mounts      |
 | `OC_NO_STATE`       | _(unset)_                                  | set to `1` to skip state mounts |
 
-The script pre-checks that Ollama is reachable before starting, and mounts your host opencode state (`~/.local/share/opencode`, etc.) plus `~/.ssh` so sessions and private git repos keep working. The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
+The script pre-checks that Ollama is reachable before starting, and mounts your host opencode state (`~/.local/share/opencode`, etc.) plus `~/.ssh` and `~/.gitconfig` so sessions, private git repos, and git identity (committing) keep working — the container runs as your host uid with no passwd entry and a generic `HOME`, so the git identity must come from the mounted config file. The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
 
 ## Configuration
 
