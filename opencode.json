@@ -48,4 +48,7 @@
   //"model": "ollama/qwen3.8-64k",
   "model": "ollama/qwen3.8-48k",
   //"model": "ollama/qwen3.8-32k"
+  "plugin": [
+    "@cortexkit/opencode-magic-context@latest"
+  ]
 }

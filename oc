@@ -89,8 +89,11 @@ MOUNTS=()
 CONTAINER_HOME="${OC_CONTAINER_HOME:-/home/user}"
 SSH_KEY_MOUNTED=""
 if [[ -z "${OC_NO_STATE:-}" ]]; then
+  # pre-create so a first-run bind mount is owned by the host user (docker
+  # would otherwise auto-create it root-owned)
+  mkdir -p "$HOME/.local/share/cortexkit"
   # .ssh lets git use your host key for clone/push to private repos
-  for dir in .local/share/opencode .local/state/opencode .cache/opencode .opencode .ssh; do
+  for dir in .local/share/opencode .local/state/opencode .local/share/cortexkit .cache/opencode .opencode .ssh; do
     if [[ -d "$HOME/$dir" ]]; then
       MOUNTS+=(-v "$HOME/$dir:$CONTAINER_HOME/$dir")
       [[ "$dir" == .ssh ]] && SSH_KEY_MOUNTED=1
