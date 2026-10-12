@@ -7,7 +7,7 @@ FROM ghcr.io/anomalyco/opencode:1.18.31
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-RUN apk add --no-cache git nodejs npm go bash openssh-client \
+RUN apk add --no-cache git nodejs npm go bash python3 openssh-client \
  && npm install -g @cortexkit/magic-context \
  && mkdir -p /workspace \
     /home/user/.config/opencode \

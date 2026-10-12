@@ -41,12 +41,22 @@
           },
           "tool_call": true,
           "reasoning": true
+        },
+        "qwen3.8-gsq-rco": {
+          "name": "Qwen3.8-gsq-rco",
+          "limit": {
+            "context": 49152,
+            "output": 16384
+          },
+          "tool_call": true,
+          "reasoning": true
         }
       }
     }
   },
+  "model": "ollama/qwen3.8-gsq-rco",
   //"model": "ollama/qwen3.8-64k",
-  "model": "ollama/qwen3.8-48k",
+  //"model": "ollama/qwen3.8-48k",
   //"model": "ollama/qwen3.8-32k"
   "plugin": [
     "@cortexkit/opencode-magic-context@latest"
