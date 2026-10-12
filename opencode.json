@@ -15,33 +15,6 @@
         "chunkTimeout": false
       },
       "models": {
-        "qwen3.8-64k": {
-          "name": "Qwen3.8-64k",
-          "limit": {
-            "context": 65536,
-            "output": 16384
-          },
-          "tool_call": true,
-          "reasoning": true
-        },
-        "qwen3.8-48k": {
-          "name": "Qwen3.8-48k",
-          "limit": {
-            "context": 49152,
-            "output": 16384
-          },
-          "tool_call": true,
-          "reasoning": true
-        },
-        "qwen3.8-32k": {
-          "name": "Qwen3.8-32k",
-          "limit": {
-            "context": 32768,
-            "output": 16384
-          },
-          "tool_call": true,
-          "reasoning": true
-        },
         "qwen3.8-gsq-rco": {
           "name": "Qwen3.8-gsq-rco",
           "limit": {
@@ -55,9 +28,6 @@
     }
   },
   "model": "ollama/qwen3.8-gsq-rco",
-  //"model": "ollama/qwen3.8-64k",
-  //"model": "ollama/qwen3.8-48k",
-  //"model": "ollama/qwen3.8-32k"
   "plugin": [
     "@cortexkit/opencode-magic-context@latest"
   ]
