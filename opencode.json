@@ -18,7 +18,7 @@
         "qwen3.8-gsq-rco": {
           "name": "Qwen3.8-gsq-rco",
           "limit": {
-            "context": 49152,
+            "context": 65536,
             "output": 16384
           },
           "tool_call": true,

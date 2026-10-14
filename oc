@@ -91,14 +91,18 @@ SSH_KEY_MOUNTED=""
 if [[ -z "${OC_NO_STATE:-}" ]]; then
   # pre-create so a first-run bind mount is owned by the host user (docker
   # would otherwise auto-create it root-owned)
-  mkdir -p "$HOME/.local/share/cortexkit"
+  # keystores (debug + release/upload) persist here, outside the container:
+  # host ~/.local/share/android -> container ~/.android
+  mkdir -p "$HOME/.local/share/opencode" "$HOME/.local/share/cortexkit" \
+           "$HOME/.local/share/android"
+  MOUNTS+=(-v "$HOME/.local/share/opencode:$CONTAINER_HOME/.local/share/opencode")
+  MOUNTS+=(-v "$HOME/.local/share/cortexkit:$CONTAINER_HOME/.local/share/cortexkit")
+  MOUNTS+=(-v "$HOME/.local/share/android:$CONTAINER_HOME/.android")
   # .ssh lets git use your host key for clone/push to private repos
-  for dir in .local/share/opencode .local/state/opencode .local/share/cortexkit .cache/opencode .opencode .ssh; do
-    if [[ -d "$HOME/$dir" ]]; then
-      MOUNTS+=(-v "$HOME/$dir:$CONTAINER_HOME/$dir")
-      [[ "$dir" == .ssh ]] && SSH_KEY_MOUNTED=1
-    fi
-  done
+  if [[ -d "$HOME/.ssh" ]]; then
+    MOUNTS+=(-v "$HOME/.ssh:$CONTAINER_HOME/.ssh")
+    SSH_KEY_MOUNTED=1
+  fi
 fi
 
 # git over SSH: pass explicit key/known_hosts paths. ssh resolves its default

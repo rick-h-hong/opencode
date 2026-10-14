@@ -24,6 +24,7 @@ Rebuild when switching the user that runs the image (or after `Dockerfile`/`open
 The image is based on `ghcr.io/anomalyco/opencode:1.18.31` and adds:
 
 - `git`, `nodejs`, `npm`, `go`, `bash`, `openssh-client`
+- Android SDK 34 in `$ANDROID_HOME` (`/opt/android-sdk`): `platforms;android-34`, `build-tools;34.0.0`, `platform-tools`, with `sdkmanager`, `adb`, etc. on `PATH`
 - Home dir `/home/user` (owned by the build user's uid/gid — the container runs as your host user)
 - Global install of `@cortexkit/magic-context`
 - `opencode.json` baked in at `/home/user/.config/opencode/opencode.json`, pointing at `http://host.docker.internal:11434/v1` with the magic-context plugin enabled
@@ -57,7 +58,7 @@ Environment overrides:
 | `OC_SSH_COMMAND`    | built from your host's `~/.ssh` keys           | full `ssh` command for git      |
 | `OC_NO_STATE`       | _(unset)_                                      | set to `1` to skip state mounts |
 
-The script pre-checks that the image exists and Ollama is reachable before starting, and mounts your host opencode state (`~/.local/share/opencode`, etc.) plus the magic-context state (`~/.local/share/cortexkit`, pre-created so a first run isn't root-owned), `~/.ssh`, and `/etc/passwd` so sessions and private git repos keep working. Git identity (committing) comes from the host's `git config user.name`/`user.email`, passed in as `GIT_*` env vars. For git over SSH, the script assembles a `GIT_SSH_COMMAND` that points at the mounted keys with explicit `IdentityFile`/`UserKnownHostsFile` paths (ssh would otherwise look under the host home from `/etc/passwd`, which is not mounted). The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
+The script pre-checks that the image exists and Ollama is reachable before starting, and mounts opencode session state (`~/.local/share/opencode`) and magic-context state (`~/.local/share/cortexkit`), both pre-created on first run so a bind mount isn't root-owned, plus `~/.ssh` (if present) and `/etc/passwd`, so sessions, memory, and private git repos keep working. `OC_NO_STATE=1` skips all of the optional mounts. Git identity (committing) comes from the host's `git config user.name`/`user.email`, passed in as `GIT_*` env vars. For git over SSH, the script assembles a `GIT_SSH_COMMAND` that points at the mounted keys with explicit `IdentityFile`/`UserKnownHostsFile` paths (ssh would otherwise look under the host home from `/etc/passwd`, which is not mounted). The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
 
 ## Configuration
 
