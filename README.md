@@ -75,7 +75,7 @@ The script pre-checks that the image exists and llama-server is reachable before
 
 ## Configuration
 
-`opencode.json` configures the `llama` provider (named `llama.cpp`) via `@ai-sdk/openai-compatible` with the model `Qwen3.8-gsq-rco` (96k context, 16k output, tool calling and reasoning). OpenCode's native auto-compaction is disabled (`compaction: { auto: false }`) because the magic-context plugin manages compaction instead, and the plugin is enabled via the `plugins` field.
+`opencode.json` configures the `llama` provider (named `llama.cpp`) via `@ai-sdk/openai-compatible` with the model `Qwen3.8-gsq-rco` (96k context, 8k output, tool calling and reasoning). OpenCode's native auto-compaction is disabled (`compaction: { auto: false }`) because the magic-context plugin manages compaction instead, and the plugin is enabled via the `plugins` field. It also allows all external-directory access without prompts (`permissions`: `external_directory` → `allow`) and enables the todo tool (`experimental.todo: true`).
 
 To use different models, load them into llama-server first and edit the provider block in `opencode.json`, then rebuild.
 
