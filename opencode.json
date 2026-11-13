@@ -1,34 +1,47 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
-    "auto": false,
-    "prune": false
+    "auto": false
   },
-  "provider": {
-    "ollama": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama",
-      "options": {
+  "providers": {
+    "llama": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "name": "llama.cpp",
+      "settings": {
         "baseURL": "http://host.docker.internal:11434/v1",
         "timeout": false,
         "headerTimeout": false,
         "chunkTimeout": false
       },
       "models": {
-        "qwen3.8-gsq-rco": {
+        "Qwen3.8-gsq-rco": {
           "name": "Qwen3.8-gsq-rco",
           "limit": {
-            "context": 65536,
-            "output": 16384
+            "context": 98304,
+            "output": 8192
           },
-          "tool_call": true,
-          "reasoning": true
+          "capabilities": {
+            "tools": true,
+            "reasoning": {
+              "supported": true
+            }
+          }
         }
       }
     }
   },
-  "model": "ollama/qwen3.8-gsq-rco",
-  "plugin": [
-    "@cortexkit/opencode-magic-context@latest"
-  ]
+  "model": "llama/Qwen3.8-gsq-rco",
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "allow"
+    }
+  ],
+  "plugins": [
+    "@cortexkit/opencode-magic-context@0.49.50"
+  ],
+  "experimental": {
+    "todo": true
+  }
 }

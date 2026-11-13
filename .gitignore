@@ -50,3 +50,6 @@ Thumbs.db
 *.mov
 *.wmv
 
+
+# server password for oc serve (do not commit)
+.oc-server-password

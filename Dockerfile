@@ -1,4 +1,4 @@
-FROM ghcr.io/anomalyco/opencode:1.18.31
+FROM ghcr.io/anomalyco/opencode:2.2.6
 
 # The container runs as the invoking host user (see oc: --user UID:GID).
 # The user building the image is the one running it, so hand /workspace and
@@ -10,8 +10,8 @@ ARG GROUP_ID=1000
 ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0:/opt/gradle-9.8.1/bin"
 
-RUN apk add --no-cache git nodejs npm go bash python3 openssh-client openjdk17 unzip curl make gcompat libgcc \
-  && npm install -g @cortexkit/magic-context
+RUN apk add --no-cache git nodejs npm go bash python3 openssh-client openjdk17 unzip curl make gcompat libgcc chromium \
+  && npm install -g @cortexkit/magic-context@0.49.50
 
 RUN mkdir -p /workspace \
     /home/user/.config/opencode \
@@ -44,6 +44,7 @@ RUN curl -fsSL -o /tmp/gradle-9.8.1-bin.zip \
   && gradle --version
 
 COPY opencode.json /home/user/.config/opencode/opencode.json
+COPY cli.json /home/user/.config/opencode/cli.json
 
 RUN chown -R "${USER_ID}:${GROUP_ID}" /workspace /home/user "$ANDROID_HOME" \
   && chmod 755 /home/user \

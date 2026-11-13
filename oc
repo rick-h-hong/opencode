@@ -1,29 +1,42 @@
+
 #!/usr/bin/env bash
-# oc - run containerised opencode against your local ollama server
+# oc - run containerised opencode against your local llama.cpp server
 #
 # Usage:
 #   oc [PATH] [OPENCODE ARGS...]
+#   oc serve [PATH]     start the persistent oc-server container (remote access)
+#   oc stop             stop the oc-server container
 #
 #   PATH            workspace to work in (default: current directory).
 #                   e.g.  oc ~/code/myproject                  # interactive TUI
 #                         oc ~/code/myproject run "fix the failing test"
 #                         oc run "hello"                        # current dir
 #   OPENCODE ARGS   everything after PATH is passed straight to opencode
-#                   (run, serve, models, -m, --agent, -c, -s, --fork, ...)
+#                   (run, models, -m, --agent, -c, -s, --fork, ...)
 #
 # Environment:
 #   OC_IMAGE           image name (default: oc-local)
-#   OC_OLLAMA_URL      ollama base url (default: http://host.docker.internal:11434)
+#   OC_LLM_URL         llama-server base url (default: http://host.docker.internal:11434)
+#                      (OC_OLLAMA_URL is still accepted as a fallback)
 #   OC_CONTAINER_HOME  home dir inside the container (default: /home/user)
 #   OC_GIT_NAME        git author/committer name   (default: host git config user.name)
 #   OC_GIT_EMAIL       git author/committer email  (default: host git config user.email)
 #   OC_SSH_COMMAND     full ssh command for git        (default: built from your host's ~/.ssh keys)
 #   OC_NO_STATE        set to 1 to skip state/.ssh mounts (also disables the auto ssh command)
+#   OC_SERVER_PASSWORD server password for `oc serve` (required 16+ chars)
+#   OC_SERVER_PASSWORD_FILE  file (chmod 600) holding the password, first line;
+#                      takes precedence over a generated password but not over
+#                      OC_SERVER_PASSWORD; mounted into the container as a
+#                      file (never an env var)
+#   OC_SERVER_PORT     port to publish for `oc serve` (default: 4096)
+#   OC_LAN_IP          host interface to bind the published port to
+#                      (default: 0.0.0.0; set it to your LAN or tailscale IP
+#                      to keep the port off other interfaces)
 
 set -euo pipefail
 
 IMAGE="${OC_IMAGE:-oc-local}"
-OLLAMA_URL="${OC_OLLAMA_URL:-http://host.docker.internal:11434}"
+LLM_URL="${OC_LLM_URL:-${OC_OLLAMA_URL:-http://host.docker.internal:11434}}"
 CONTAINER="oc-session"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
@@ -52,6 +65,21 @@ is_opencode_cmd() {
   return 1
 }
 
+# server mode: intercept before path/arg handling - `serve` is not passed
+# through to an interactive container, it manages the persistent oc-server
+SERVE=0
+if [[ ${1:-} == serve ]]; then
+  SERVE=1
+  shift
+elif [[ ${1:-} == stop ]]; then
+  if docker rm -f oc-server >/dev/null 2>&1; then
+    echo "oc: server stopped"
+  else
+    echo "oc: no server container running"
+  fi
+  exit 0
+fi
+
 if [[ $# -gt 0 ]]; then
   if is_opencode_cmd "$1"; then
     # no explicit path: work in the current directory
@@ -74,15 +102,19 @@ fi
 
 if ! docker run --rm --init \
     --add-host host.docker.internal:host-gateway \
-    --entrypoint sh "$IMAGE" -c "wget -q -O /dev/null $OLLAMA_URL/api/tags" 2>/dev/null; then
-  echo "oc: cannot reach ollama at $OLLAMA_URL (is it running?)" >&2
-  exit 1
+    --entrypoint sh "$IMAGE" -c "wget -q -O /dev/null $LLM_URL/health" 2>/dev/null; then
+  if [[ $SERVE == 1 ]]; then
+    echo "oc: warning: llama-server not reachable at $LLM_URL - the server will start without a working model" >&2
+  else
+    echo "oc: cannot reach llama-server at $LLM_URL (is it running?)" >&2
+    exit 1
+  fi
 fi
 
 # --- mount host opencode state so sessions/history survive across runs ------
-# NOTE: ~/.config/opencode is deliberately NOT mounted - its ollama baseURL
-# points at the host's localhost. The container uses the config baked into
-# the image (opencode.json), which targets host.docker.internal:11434.
+# NOTE: ~/.config/opencode is deliberately NOT mounted - its config points at
+# the host's localhost. The container uses the config baked into the image
+# (opencode.json), which targets host.docker.internal:11434 (llama-server).
 # Mount it explicitly if you want your host global config inside instead.
 # Set OC_NO_STATE=1 to skip state mounts entirely.
 MOUNTS=()
@@ -123,6 +155,86 @@ elif [[ -n "$SSH_KEY_MOUNTED" ]]; then
   GIT_SSH_CMD=(-e GIT_SSH_COMMAND="$cmd")
 fi
 
+# --- serve: persistent oc-server container -----------------------------------
+if [[ $SERVE == 1 ]]; then
+  if [[ $# -gt 0 ]]; then
+    echo "oc: warning: extra arguments are not passed to the server in serve mode (path only): $*" >&2
+  fi
+  PORT="${OC_SERVER_PORT:-4096}"
+  HOST_BIND="${OC_LAN_IP:-0.0.0.0}"
+  PASSWORD_FILE="${OC_SERVER_PASSWORD_FILE:-}"
+  PASSWORD="${OC_SERVER_PASSWORD:-}"
+  PASSWORD_SOURCE="env"
+  if [[ -z "$PASSWORD" && -n "$PASSWORD_FILE" ]]; then
+    [[ -r "$PASSWORD_FILE" ]] || { echo "oc: password file not readable: $PASSWORD_FILE" >&2; exit 1; }
+    PASSWORD="$(head -n 1 "$PASSWORD_FILE" | sed 's/[[:space:]]*$//')"
+    PASSWORD_SOURCE="file"
+    perms="$( { stat -c %a "$PASSWORD_FILE" 2>/dev/null || stat -f %Lp "$PASSWORD_FILE" 2>/dev/null; } | tr -d ' \n')"
+    if [[ -n "$perms" && ${perms: -2} != 00 ]]; then
+      echo "oc: warning: password file $PASSWORD_FILE is readable beyond the owner (mode $perms) - use chmod 600" >&2
+    fi
+  elif [[ -z "$PASSWORD" ]]; then
+    PASSWORD="$( (openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64) | tr -d '\n')"
+    PASSWORD_SOURCE="generated"
+  elif [[ -n "$PASSWORD_FILE" ]]; then
+    echo "oc: note: OC_SERVER_PASSWORD takes precedence over OC_SERVER_PASSWORD_FILE" >&2
+  fi
+  if [[ ${#PASSWORD} -lt 16 ]]; then
+    echo "oc: refusing to serve with a password under 16 characters - set OC_SERVER_PASSWORD or OC_SERVER_PASSWORD_FILE to a strong one" >&2
+    exit 1
+  fi
+
+  HOST_IP="$( { hostname -I 2>/dev/null || true; } | awk '{print $1}')"
+  if [[ -z "$HOST_IP" ]]; then
+    HOST_IP="$( { ip route get 1.1.1.1 2>/dev/null || true; } | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i+1); exit }}')"
+  fi
+  if [[ -z "$HOST_IP" ]]; then
+    HOST_IP="<host-ip>"
+  fi
+
+  docker rm -f oc-server >/dev/null 2>&1 || true
+  RUN_ARGS=(-d --init --restart unless-stopped
+    --name oc-server
+    --add-host host.docker.internal:host-gateway
+    --user "${HOST_UID}:${HOST_GID}"
+    -w /workspace
+    -p "${HOST_BIND}:${PORT}:4096"
+    -v "$WORKDIR:/workspace"
+    ${MOUNTS[@]+"${MOUNTS[@]}"}
+    --mount type=bind,src=/etc/passwd,dst=/etc/passwd,ro
+    -e HOME="$CONTAINER_HOME"
+    -e LLM_URL="$LLM_URL")
+  CMD=(serve --hostname 0.0.0.0 --port 4096)
+  if [[ $PASSWORD_SOURCE == file ]]; then
+    # password stays a file, not an env var: mounted ro, exported only in the
+    # entrypoint wrapper so it never lands in `docker inspect` env
+    RUN_ARGS+=(-v "$PASSWORD_FILE:/run/secrets/oc-server-password:ro" --entrypoint sh)
+    CMD=(-c 'export OPENCODE_PASSWORD="$(cat /run/secrets/oc-server-password)"; exec opencode serve --hostname 0.0.0.0 --port 4096')
+  else
+    RUN_ARGS+=(-e OPENCODE_PASSWORD="$PASSWORD")
+  fi
+  RUN_ARGS+=(${GIT_NAME:+-e GIT_AUTHOR_NAME="$GIT_NAME" -e GIT_COMMITTER_NAME="$GIT_NAME"}
+    ${GIT_EMAIL:+-e GIT_AUTHOR_EMAIL="$GIT_EMAIL" -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"}
+    ${GIT_SSH_CMD[@]+"${GIT_SSH_CMD[@]}"})
+  docker run "${RUN_ARGS[@]}" "$IMAGE" "${CMD[@]}" >/dev/null
+
+  echo "oc: server running as container 'oc-server' (detached, restart unless-stopped)"
+  echo
+  echo "  Connect the OpenCode app (Settings -> Connection -> Add -> Manual):"
+  echo "    Server:   http://${HOST_IP}:${PORT}"
+  echo "    Username: opencode"
+  if [[ $PASSWORD_SOURCE == file ]]; then
+    echo "    Password: from ${PASSWORD_FILE}"
+  else
+    echo "    Password: ${PASSWORD}"
+  fi
+  echo
+  echo "  The web UI is at the same URL in a browser. Stop the server with: oc stop"
+  echo "  If the port is published on 0.0.0.0, keep the LAN private or use"
+  echo "  OC_LAN_IP=<lan-or-tailscale-ip> to bind the published port to one interface."
+  exit 0
+fi
+
 # --- run ---------------------------------------------------------------------
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
@@ -141,7 +253,7 @@ docker run -i $TTY_FLAG --rm --init \
   ${MOUNTS[@]+"${MOUNTS[@]}"} \
   --mount type=bind,src=/etc/passwd,dst=/etc/passwd,ro \
   -e HOME="$CONTAINER_HOME" \
-  -e OLLAMA_URL="$OLLAMA_URL" \
+  -e LLM_URL="$LLM_URL" \
   ${GIT_NAME:+-e GIT_AUTHOR_NAME="$GIT_NAME" -e GIT_COMMITTER_NAME="$GIT_NAME"} \
   ${GIT_EMAIL:+-e GIT_AUTHOR_EMAIL="$GIT_EMAIL" -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"} \
   ${GIT_SSH_CMD[@]+"${GIT_SSH_CMD[@]}"} \
