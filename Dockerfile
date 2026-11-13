@@ -45,6 +45,10 @@ RUN curl -fsSL -o /tmp/gradle-9.8.1-bin.zip \
 
 COPY opencode.json /home/user/.config/opencode/opencode.json
 COPY cli.json /home/user/.config/opencode/cli.json
+# magic-context historian config: baked in user-level so it applies in every
+# project even when /workspace is not mounted (project-level .cortexkit/
+# magic-context.jsonc, if present, merges on top).
+COPY .cortexkit/magic-context.jsonc /home/user/.config/cortexkit/magic-context.jsonc
 
 RUN chown -R "${USER_ID}:${GROUP_ID}" /workspace /home/user "$ANDROID_HOME" \
   && chmod 755 /home/user \

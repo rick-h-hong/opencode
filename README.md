@@ -21,7 +21,7 @@ docker build \
 
 or simply `make build` (override the image name with `make build IMAGE=...`; `make run` is a quick smoke test, `make clean` removes the image).
 
-Rebuild when switching the user that runs the image (or after `Dockerfile`/`opencode.json`/`cli.json` changes).
+Rebuild when switching the user that runs the image (or after `Dockerfile`/`opencode.json`/`cli.json`/`.cortexkit/magic-context.jsonc` changes).
 
 The image is based on `ghcr.io/anomalyco/opencode:2.2.6` and adds:
 
@@ -33,6 +33,7 @@ The image is based on `ghcr.io/anomalyco/opencode:2.2.6` and adds:
 - Global install of `@cortexkit/magic-context@0.49.50`
 - `opencode.json` baked in at `/home/user/.config/opencode/opencode.json`, pointing at `http://host.docker.internal:11434/v1` with the magic-context plugin enabled
 - `cli.json` baked in at `/home/user/.config/opencode/cli.json` (TUI/CLI settings, schema `https://opencode.ai/v2/cli.json`), disabling the Mini TUI splash banners (`mini.splash: "hide"`)
+- magic-context historian config baked in at `/home/user/.config/cortexkit/magic-context.jsonc` (points the historian at `llama/Qwen3.5`, see [magic-context](#magic-context))
 
 ## Usage
 
@@ -75,7 +76,7 @@ The script pre-checks that the image exists and llama-server is reachable before
 
 ## Configuration
 
-`opencode.json` configures the `llama` provider (named `llama.cpp`) via `@ai-sdk/openai-compatible` with the model `Qwen3.8-gsq-rco` (96k context, 8k output, tool calling and reasoning). OpenCode's native auto-compaction is disabled (`compaction: { auto: false }`) because the magic-context plugin manages compaction instead, and the plugin is enabled via the `plugins` field. It also allows all external-directory access without prompts (`permissions`: `external_directory` → `allow`) and enables the todo tool (`experimental.todo: true`).
+`opencode.json` configures the `llama` provider (named `llama.cpp`) via `@ai-sdk/openai-compatible` with the models `Qwen3.8-gsq-rco` (session model) and `Qwen3.5` (magic-context historian), both with 96k context, 8k output, tool calling and reasoning. OpenCode's native auto-compaction is disabled (`compaction: { auto: false }`) because the magic-context plugin manages compaction instead, and the plugin is enabled via the `plugins` field. It also allows all external-directory access without prompts (`permissions`: `external_directory` → `allow`) and enables the todo tool (`experimental.todo: true`).
 
 To use different models, load them into llama-server first and edit the provider block in `opencode.json`, then rebuild.
 
@@ -131,3 +132,11 @@ docker run --rm --entrypoint sh oc-local -c "magic-context --help"
 ```
 
 The matching OpenCode plugin (`@cortexkit/opencode-magic-context`) is already enabled in the baked-in `opencode.json`. Its state lives in `~/.local/share/cortexkit`, which `oc` mounts from the host (and pre-creates on first run), so compacted history and project memory persist across container runs.
+
+The historian (the model that summarizes compacted history and maintains project memory) runs on the cheaper `Qwen3.5` model instead of the session model. It is configured in `.cortexkit/magic-context.jsonc`:
+
+```jsonc
+{ "historian": { "opencode": { "model": "llama/Qwen3.5" } } }
+```
+
+`oc` mounts the host's `/workspace` over the image's, so that file is picked up as the project-level config wherever the repo lives; a copy is also baked into the image at `/home/user/.config/cortexkit/magic-context.jsonc` (user level), so the setting applies in every project even when `/workspace` is not mounted — project-level config merges on top of it. The plugin reloads the config live, so no rebuild is needed to change the historian model in a running container.
