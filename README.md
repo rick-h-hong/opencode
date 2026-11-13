@@ -37,10 +37,12 @@ The image is based on `ghcr.io/anomalyco/opencode:2.2.6` and adds:
 
 ## Usage
 
-The `oc` helper script runs opencode inside the container against your local llama-server:
+The `oc` helper script runs opencode inside the container against your local llama-server.
+
+To make it available system-wide, create a symlink:
 
 ```sh
-./oc [PATH] [OPENCODE ARGS...]
+ln -sf /workspace/oc /usr/local/bin/oc
 ```
 
 Examples:
