@@ -1,8 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/cortexkit/magic-context/master/assets/magic-context.schema.json",
-  "historian": {
-    "opencode": { "model": "llama/Qwen3.5" }
-  },
   "execute_threshold_percentage": 80,
   "history_budget_percentage": 0.20
 }
