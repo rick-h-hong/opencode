@@ -74,7 +74,7 @@ Environment overrides:
 
 `OC_OLLAMA_URL` is still accepted as a fallback for `OC_LLM_URL`.
 
-The script pre-checks that the image exists and llama-server is reachable before starting, and mounts opencode session state (`~/.local/share/opencode`), magic-context state (`~/.local/share/cortexkit`), and Android keystores (`~/.local/share/android` → `~/.android`) — all pre-created on first run so a bind mount isn't root-owned — plus `~/.ssh` (if present) and `/etc/passwd`, so sessions, memory, and private git repos keep working. `OC_NO_STATE=1` skips all of the optional mounts. Git identity (committing) comes from the host's `git config user.name`/`user.email`, passed in as `GIT_*` env vars. For git over SSH, the script assembles a `GIT_SSH_COMMAND` that points at the mounted keys with explicit `IdentityFile`/`UserKnownHostsFile` paths (ssh would otherwise look under the host home from `/etc/passwd`, which is not mounted). The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
+The script pre-checks that the image exists and llama-server is reachable before starting, and mounts opencode session state (`~/.local/share/opencode`), magic-context state (the workspace's `.cortexkit` → container `~/.local/share/cortexkit`), and Android keystores (`~/.local/share/android` → `~/.android`) — all pre-created on first run so a bind mount isn't root-owned — plus `~/.ssh` (if present) and `/etc/passwd`, so sessions, memory, and private git repos keep working. `OC_NO_STATE=1` skips all of the optional mounts. Git identity (committing) comes from the host's `git config user.name`/`user.email`, passed in as `GIT_*` env vars. For git over SSH, the script assembles a `GIT_SSH_COMMAND` that points at the mounted keys with explicit `IdentityFile`/`UserKnownHostsFile` paths (ssh would otherwise look under the host home from `/etc/passwd`, which is not mounted). The host's `~/.config/opencode` is deliberately **not** mounted — the image's baked-in `opencode.json` targets `host.docker.internal` instead.
 
 ## Configuration
 
@@ -133,7 +133,7 @@ The CLI is available globally in the image:
 docker run --rm --entrypoint sh oc-local -c "magic-context --help"
 ```
 
-The matching OpenCode plugin (`@cortexkit/opencode-magic-context`) is already enabled in the baked-in `opencode.json`. Its state lives in `~/.local/share/cortexkit`, which `oc` mounts from the host (and pre-creates on first run), so compacted history and project memory persist across container runs.
+The matching OpenCode plugin (`@cortexkit/opencode-magic-context`) is already enabled in the baked-in `opencode.json`. Its state lives in `.cortexkit` at the workspace root — where `oc` is called, or the PATH argument to `oc` — which `oc` mounts into the container's `~/.local/share/cortexkit` (and pre-creates on first run), so compacted history and project memory persist across container runs.
 
 The historian (the model that summarizes compacted history and maintains project memory) runs on the cheaper `Qwen3.5` model instead of the session model. It is configured in `.cortexkit/magic-context.jsonc`:
 

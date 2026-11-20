@@ -7,7 +7,8 @@
 #   oc serve [PATH]     start the persistent oc-server container (remote access)
 #   oc stop             stop the oc-server container
 #
-#   PATH            workspace to work in (default: current directory).
+#   PATH            workspace to work in (default: current directory);
+#                   magic-context state is read/written in <PATH>/.cortexkit
 #                   e.g.  oc ~/code/myproject                  # interactive TUI
 #                         oc ~/code/myproject run "fix the failing test"
 #                         oc run "hello"                        # current dir
@@ -125,10 +126,12 @@ if [[ -z "${OC_NO_STATE:-}" ]]; then
   # would otherwise auto-create it root-owned)
   # keystores (debug + release/upload) persist here, outside the container:
   # host ~/.local/share/android -> container ~/.android
-  mkdir -p "$HOME/.local/share/opencode" "$HOME/.local/share/cortexkit" \
-           "$HOME/.local/share/android"
+  # .cortexkit: expected at the workspace root - where oc is called, or the
+  # PATH argument to oc - so magic-context state is per-workspace
+  mkdir -p "$HOME/.local/share/opencode" "$HOME/.local/share/android" \
+           "$WORKDIR/.cortexkit"
   MOUNTS+=(-v "$HOME/.local/share/opencode:$CONTAINER_HOME/.local/share/opencode")
-  MOUNTS+=(-v "$HOME/.local/share/cortexkit:$CONTAINER_HOME/.local/share/cortexkit")
+  MOUNTS+=(-v "$WORKDIR/.cortexkit:$CONTAINER_HOME/.local/share/cortexkit")
   MOUNTS+=(-v "$HOME/.local/share/android:$CONTAINER_HOME/.android")
   # .ssh lets git use your host key for clone/push to private repos
   if [[ -d "$HOME/.ssh" ]]; then
