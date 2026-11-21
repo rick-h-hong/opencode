@@ -11,7 +11,7 @@ ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0:/opt/gradle-9.8.1/bin"
 
 RUN apk add --no-cache git nodejs npm go bash python3 openssh-client openjdk17 unzip curl make gcompat libgcc chromium \
-  && npm install -g @cortexkit/magic-context@0.49.50
+  && npm install -g @cortexkit/magic-context@0.49.50 @mermaid-js/mermaid-cli
 
 RUN mkdir -p /workspace \
     /home/user/.config/opencode \
